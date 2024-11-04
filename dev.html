@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Extension Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+  <div class="max-w-4xl mx-auto p-8">
+    <div class="bg-white rounded-lg shadow-lg p-6">
+      <!-- Chat Interface -->
+      <div class="mb-6">
+        <h2 class="text-lg font-semibold mb-4">Chat Interface</h2>
+        <div id="chat-log" class="h-64 border border-gray-200 rounded-lg p-4 mb-4 overflow-y-auto"></div>
+        <div class="flex gap-2">
+          <input type="text" id="chat-input" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg" 
+                 placeholder="Type a message...">
+          <button id="send-message" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Send
+          </button>
+        </div>
+      </div>
+
+      <!-- Response Settings -->
+      <div class="border-t pt-6">
+        <h2 class="text-lg font-semibold mb-4">Response Settings</h2>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Response Preset</label>
+            <select id="preset-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <!-- Presets will be added here -->
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Response Delay (seconds)</label>
+            <input type="number" id="delay-input" class="w-full px-3 py-2 border border-gray-300 rounded-lg" 
+                   value="1" min="0" max="10" step="0.5">
+          </div>
+
+          <div>
+            <label class="flex items-center text-sm font-medium text-gray-700">
+              <input type="checkbox" id="auto-submit" class="mr-2"> Auto-submit responses
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preset Manager Modal -->
+    <div id="preset-manager" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg p-6 w-[90%] max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">Manage Presets</h3>
+          <button id="close-preset-manager" class="text-gray-500 hover:text-gray-700">×</button>
+        </div>
+
+        <div id="preset-list" class="space-y-4 mb-4">
+          <!-- Presets will be added here -->
+        </div>
+
+        <div class="flex justify-between">
+          <button id="add-preset" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            Add Preset
+          </button>
+          <div class="space-x-2">
+            <button id="reset-presets" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+              Reset to Defaults
+            </button>
+            <button id="save-presets" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createPresetManager } from './js/presets.js';
+    import { createUI } from './js/ui.js';
+    import { createChatManager } from './js/chat-manager.js';
+    import { createState } from './js/state.js';
+
+    // Initialize elements
+    const elements = {
+      chatLog: document.getElementById('chat-log'),
+      chatInput: document.getElementById('chat-input'),
+      sendMessage: document.getElementById('send-message'),
+      presetSelect: document.getElementById('preset-select'),
+      delayInput: document.getElementById('delay-input'),
+      autoSubmit: document.getElementById('auto-submit'),
+      presetManager: document.getElementById('preset-manager'),
+      presetList: document.getElementById('preset-list'),
+      addPreset: document.getElementById('add-preset'),
+      savePresets: document.getElementById('save-presets'),
+      closePresetManager: document.getElementById('close-preset-manager'),
+      resetPresets: document.getElementById('reset-presets')
+    };
+
+    // Initialize managers
+    const state = createState();
+    const presetManager = createPresetManager();
+    
+    // Helper function to log messages
+    const log = (message, type = 'system') => {
+      const div = document.createElement('div');
+      div.className = `mb-2 ${type === 'user' ? 'text-blue-600' : type === 'bot' ? 'text-green-600' : 'text-gray-500'}`;
+      div.textContent = message;
+      elements.chatLog.appendChild(div);
+      elements.chatLog.scrollTop = elements.chatLog.scrollHeight;
+    };
+
+    const ui = createUI(elements, state, presetManager, log);
+    const chatManager = createChatManager(elements, state, presetManager, log);
+
+    // Event listeners
+    elements.sendMessage.addEventListener('click', chatManager.sendMessage);
+    elements.chatInput.addEventListener('keypress', chatManager.handleKeyPress);
+
+    elements.presetSelect.addEventListener('change', (e) => {
+      if (e.target.value === '__manage__') {
+        ui.showPresetManager();
+        e.target.value = state.currentPreset;
+      } else {
+        state.currentPreset = e.target.value;
+        const preset = presetManager.getPreset(state.currentPreset);
+        log(`Preset changed to: ${preset.name}`);
+      }
+    });
+
+    elements.addPreset?.addEventListener('click', () => {
+      const newPreset = {
+        name: 'New Preset',
+        type: 'fixed',
+        text: '',
+        repeat: {
+          enabled: false,
+          messages: []
+        }
+      };
+      elements.presetList.appendChild(ui.createPresetEditor('new_' + Date.now(), newPreset));
+    });
+
+    elements.closePresetManager?.addEventListener('click', ui.hidePresetManager);
+    elements.resetPresets?.addEventListener('click', () => {
+      if (confirm('Reset all presets to defaults? This cannot be undone.')) {
+        presetManager.resetToDefaults();
+        ui.updatePresetSelect();
+        ui.showPresetManager();
+        log('Presets reset to defaults');
+      }
+    });
+
+    // Initialize
+    ui.updatePresetSelect();
+    log('Chat demo ready');
+  </script>
+</body>
+</html>
